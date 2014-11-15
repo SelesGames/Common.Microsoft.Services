@@ -41,6 +41,7 @@
     <Compile Include="LiveTransientAccessToken.cs" />
     <Compile Include="OneNote\OneNoteServiceClient.cs" />
     <Compile Include="OneNote\OneNoteServiceClientBase.cs" />
+    <Compile Include="OneNote\Response\ServiceCallResponse.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="OneNote\Response\BaseResponse.cs" />
     <Compile Include="OneNote\Response\CreateSuccessResponse.cs" />

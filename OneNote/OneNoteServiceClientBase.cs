@@ -1,5 +1,6 @@
 ﻿using Common.Microsoft.Services.OneNote.Response;
 using Newtonsoft.Json;
+using SelesGames.HttpClient;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -7,6 +8,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Common.Microsoft.Services.OneNote
@@ -35,7 +37,7 @@ namespace Common.Microsoft.Services.OneNote
                 Content = CreateHtmlContent(html)
             };
 
-            var response = await CreateClient(accessToken).SendAsync(createMessage);
+            var response = await SendRequest(accessToken, createMessage);
             return await TranslateResponse(response);
         }
 
@@ -57,7 +59,7 @@ namespace Common.Microsoft.Services.OneNote
                         }
                 };
 
-                var response = await CreateClient(accessToken).SendAsync(createMessage);
+                var response = await SendRequest(accessToken, createMessage);
                 return await TranslateResponse(response);
             }
         }
@@ -76,7 +78,7 @@ namespace Common.Microsoft.Services.OneNote
                     }
             };
 
-            var response = await CreateClient(accessToken).SendAsync(createMessage);
+            var response = await SendRequest(accessToken, createMessage);
             return await TranslateResponse(response);
         }
 
@@ -87,10 +89,9 @@ namespace Common.Microsoft.Services.OneNote
 
         #region Private helper functions
 
-        HttpClient CreateClient(string accessToken)
+        Task<HttpResponse> SendRequest(string accessToken, HttpRequestMessage request)
         {
-            var client = new HttpClient();
-            var headers = client.DefaultRequestHeaders;
+            var headers = request.Headers;
 
             // Note: API only supports JSON return type.
             headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
@@ -101,24 +102,46 @@ namespace Common.Microsoft.Services.OneNote
                 headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
             }
 
-            return client;
+            var client = new SmartHttpClient();
+            return client.SendAsync(request, CancellationToken.None);
         }
+
+        //HttpClient CreateClient(string accessToken)
+        //{
+        //    var client = new HttpClient();
+        //    var headers = client.DefaultRequestHeaders;
+
+        //    // Note: API only supports JSON return type.
+        //    headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+        //    // This allows you to see what happens when an unauthenticated call is made.
+        //    if (accessToken != null)
+        //    {
+        //        headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        //    }
+
+        //    return client;
+        //}
 
         StringContent CreateHtmlContent(string html)
         {
             return new StringContent(html, Encoding.UTF8, "text/html");
         }
 
-        async static Task<BaseResponse> TranslateResponse(HttpResponseMessage response)
+        async static Task<BaseResponse> TranslateResponse(HttpResponse response)
         {
             BaseResponse standardResponse;
-            if (response.StatusCode == HttpStatusCode.Created)
+
+            if (response != null &&
+                response.HttpResponseMessage != null &&
+                response.HttpResponseMessage.StatusCode == HttpStatusCode.Created)
             {
-                var responseString = await response.Content.ReadAsStringAsync();
-                dynamic responseObject = JsonConvert.DeserializeObject(responseString);
+                var responseObject = await response.Read<ServiceCallResponse>();
+                //var responseString = await response.Content.ReadAsStringAsync();
+                //dynamic responseObject = JsonConvert.DeserializeObject(responseString);
                 standardResponse = new CreateSuccessResponse
                 {
-                    StatusCode = response.StatusCode,
+                    StatusCode = response.HttpResponseMessage.StatusCode,
                     OneNoteClientUrl = responseObject.links.oneNoteClientUrl.href,
                     OneNoteWebUrl = responseObject.links.oneNoteWebUrl.href
                 };
@@ -127,14 +150,14 @@ namespace Common.Microsoft.Services.OneNote
             {
                 standardResponse = new StandardErrorResponse
                 {
-                    StatusCode = response.StatusCode,
-                    Message = await response.Content.ReadAsStringAsync()
+                    StatusCode = response.HttpResponseMessage.StatusCode,
+                    Message = await response.HttpResponseMessage.Content.ReadAsStringAsync()
                 };
             }
 
             // Extract the correlation id.  Apps should log this if they want to collect data to diagnose failures with Microsoft support 
             IEnumerable<string> correlationValues;
-            if (response.Headers.TryGetValues("X-CorrelationId", out correlationValues))
+            if (response.HttpResponseMessage.Headers.TryGetValues("X-CorrelationId", out correlationValues))
             {
                 standardResponse.CorrelationId = correlationValues.FirstOrDefault();
             }
