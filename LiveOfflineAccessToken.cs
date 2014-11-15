@@ -1,9 +1,10 @@
-﻿using Newtonsoft.Json;
+﻿using SelesGames.HttpClient;
 using System;
 using System.Globalization;
 using System.Net;
 using System.Net.Http;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Common.Microsoft.Services
@@ -96,21 +97,22 @@ namespace Common.Microsoft.Services
                     TOKEN_REFRESH_CONTENT_TYPE)
             };
 
-            var client = new HttpClient();
-            var response = await client.SendAsync(createMessage);
+            var client = new SmartHttpClient();
+            var response = await client.SendAsync(createMessage, CancellationToken.None);
             await ParseRefreshTokenResponse(response);
         }
 
-        async Task ParseRefreshTokenResponse(HttpResponseMessage response)
+        async Task ParseRefreshTokenResponse(HttpResponse response)
         {
-            if (response.StatusCode == HttpStatusCode.OK)
+            if (response != null &&
+                response.HttpResponseMessage != null &&
+                response.HttpResponseMessage.StatusCode == HttpStatusCode.OK)
             {
-                var responseString = await response.Content.ReadAsStringAsync();
-                dynamic responseObject = JsonConvert.DeserializeObject(responseString);
+                var responseObject = await response.Read<RefreshTokenResponse>();
                 AccessToken = responseObject.access_token;
-                var expiresInSeconds = (double)responseObject.expires_in;
-                //AccessTokenExpiration = now.AddSeconds(expiresInSeconds);
                 RefreshToken = responseObject.refresh_token;
+                //var expiresInSeconds = (double)responseObject.expires_in;
+                //AccessTokenExpiration = now.AddSeconds(expiresInSeconds);
             }
         }
 
